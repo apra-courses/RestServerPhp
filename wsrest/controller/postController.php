@@ -25,7 +25,8 @@ class postController extends RestController {
                 return false;
             }
             $postModel = $this->initClass();
-            return $postModel->find($params['id']);
+            $model = $postModel->find($params['id']);
+            return $this->modelToRawData($model);
         } catch (ItaException $ex) {
             $this->handleError($ex->getNativeErrorCode(), $ex->getNativeErroreDesc());
             return false;
@@ -42,25 +43,12 @@ class postController extends RestController {
         $this->resetLastError();
         try {
             $postModel = $this->initClass();
-            return $postModel->all();
-        } catch (ItaException $ex) {
-            $this->handleError($ex->getNativeErrorCode(), $ex->getNativeErroreDesc());
-            return false;
-        } catch (Exception $ex) {
-            $this->handleError($ex->getCode(), $ex->getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Conteggio in base ad un QueryData
-     * @param array $params Parametri
-     */
-    public function count() {
-        $this->resetLastError();
-        try {
-            $postModel = $this->initClass();
-            return $postModel->count();
+            $models = $postModel->all();
+            $toReturn = array();
+            foreach ($models as $key => $model) {
+                $toReturn[] = $this->modelToRawData($model);
+            }
+            return $toReturn;
         } catch (ItaException $ex) {
             $this->handleError($ex->getNativeErrorCode(), $ex->getNativeErroreDesc());
             return false;
@@ -93,7 +81,7 @@ class postController extends RestController {
             }
 
             $postModel = $this->initClass();
-            return $postModel->save($params);
+            return $postModel->save($this->rawDataToModel($params));
         } catch (ItaException $ex) {
             $this->handleError($ex->getNativeErrorCode(), $ex->getNativeErroreDesc());
             return false;
@@ -122,7 +110,25 @@ class postController extends RestController {
                 return false;
             }
             $postModel = $this->initClass();
-            if ($postModel->update($params)) {
+
+            $model = $postModel->find($params['id']);
+
+            if (!$model) {
+                $this->handleError(self::ERROR_PRECONDITION, "Modello non trovato");
+                return false;
+            }
+
+            if ($params['title']) {
+                $model->setTitle($params['title']);
+            }
+            if ($params['email']) {
+                $model->setEmail($params['email']);
+            }
+            if ($params['message']) {
+                $model->setMessage($params['message']);
+            }
+
+            if ($postModel->update($model)) {
                 return "Record aggiornato";
             }
             return false;
@@ -164,6 +170,41 @@ class postController extends RestController {
         $pdoConn = DbFactory::create($data);
         $postModel = new Post($pdoConn->getConn());
         return $postModel;
+    }
+
+    public function saveComment($postid) {
+        $comment = new Comment();
+        $comment->setComment($_POST['comment']);
+        $comment->setPost_id($postid);
+        $comment->setEmail($_POST['email']);
+        $this->comment->save($comment);
+
+        redirect('/post/' . $postid);
+    }
+
+    private function rawDataToModel($rawData) {
+        $post = new Post();
+        $post->setId($rawData['id']);
+        $post->setTitle($rawData['title']);
+        $post->setMessage($rawData['message']);
+        $post->setEmail($rawData['email']);
+        $post->setDatecreated($rawData['datecreated']);
+        return $post;
+    }
+
+    private function modelToRawData($model) {
+        $toReturn = array(
+            'title' => $model->getTitle(),
+            'message' => $model->getMessage(),
+            'email' => $model->getEmail(),
+            'datecreated' => $model->getDatecreated() ? $model->getDatecreated() : date('Y-m-d H:i:s')
+        );
+
+        if ($model->getId()) {
+            $toReturn['id'] = $model->getId();
+        }
+
+        return $toReturn;
     }
 
 }
